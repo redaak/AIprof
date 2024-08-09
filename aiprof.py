@@ -57,35 +57,40 @@ def generate_quiz(file_content, difficulty, question_type):
 st.set_page_config(page_title="Course Quiz Generator", layout="wide")
 
 st.title("📚 Course Quiz Generator")
-st.markdown("Upload your course PDF, specify quiz details, and generate quiz questions.")
+st.markdown("""
+Upload your course PDF, specify quiz details, and generate quiz questions. 
+Provide the details below to get customized quiz questions based on your content.
+""")
 
 # Upload section
-uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+with st.container():
+    st.markdown("### 📄 Upload Your Course PDF")
+    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    
+    if uploaded_file is not None:
+        file_content = extract_text_from_pdf(uploaded_file)
+        if file_content:
+            st.write("**Extracted Text:**")
+            st.text_area("Text Content", value=file_content, height=300, max_chars=5000)
 
-if uploaded_file is not None:
-    file_content = extract_text_from_pdf(uploaded_file)
-    if file_content:
-        st.write("**Extracted Text:**")
-        st.text_area("Text Content", value=file_content, height=300)
+            # Quiz generation inputs
+            st.sidebar.header("Quiz Details")
+            difficulty = st.sidebar.selectbox("Select Difficulty", ["Easy", "Medium", "Hard"])
+            question_type = st.sidebar.selectbox("Select Question Type", ["Direct", "Case Scenario", "MCQ", "Essay"])
 
-        # Quiz generation inputs
-        st.sidebar.header("Quiz Details")
-        difficulty = st.sidebar.selectbox("Select Difficulty", ["Easy", "Medium", "Hard"])
-        question_type = st.sidebar.selectbox("Select Question Type", ["Direct", "Case Scenario", "MCQ", "Essay"])
+            if st.sidebar.button("Generate Quiz"):
+                with st.spinner('Generating quiz...'):
+                    quiz_result = generate_quiz(file_content, difficulty, question_type)
 
-        if st.sidebar.button("Generate Quiz"):
-            with st.spinner('Generating quiz...'):
-                quiz_result = generate_quiz(file_content, difficulty, question_type)
+                st.markdown("### 📝 Generated Quiz Questions")
+                st.text_area("Quiz Questions", value=quiz_result, height=300)
 
-            st.markdown("### Generated Quiz Questions")
-            st.text_area("Quiz Questions", value=quiz_result, height=300)
+                # Button to show/hide answers
+                if st.button("Show Answers"):
+                    # Generate answers (mocked here for demonstration purposes)
+                    # You need to replace this with actual API call or logic to generate answers
+                    answers = "These are the answers to the quiz questions."
+                    st.text_area("Quiz Answers", value=answers, height=300)
 
-            # Button to show/hide answers
-            if st.button("Show Answers"):
-                # Generate answers (mocked here for demonstration purposes)
-                # You need to replace this with actual API call or logic to generate answers
-                answers = "These are the answers to the quiz questions."
-                st.text_area("Quiz Answers", value=answers, height=300)
-
-else:
-    st.markdown("_Please upload a PDF file to proceed._")
+    else:
+        st.markdown("_Please upload a PDF file to proceed._")
