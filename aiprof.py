@@ -1,84 +1,91 @@
 import streamlit as st
+import fitz  # PyMuPDF
 import requests
-import fitz  # PyMuPDF for PDF extraction
-import re
+import json
+import io
 
-# Set up NVIDIA API
+# Set up API credentials
 api_key = st.secrets["api"]["key"]
 base_url = "https://integrate.api.nvidia.com/v1"
-headers = {
-    "Authorization": f"Bearer {api_key}",
-    "Content-Type": "application/json"
-}
 
-def extract_text_from_pdf(pdf_file):
+def extract_text_from_pdf(uploaded_file):
+    if uploaded_file.type != "application/pdf":
+        st.error("Please upload a PDF file.")
+        return ""
+
+    pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     text = ""
-    with fitz.open(pdf_file) as pdf:
-        for page in pdf:
-            text += page.get_text()
+    
+    for page_num in range(len(pdf)):
+        page = pdf.load_page(page_num)
+        text += page.get_text()
+    
     return text
 
 def generate_quiz(file_content, difficulty, question_type):
     prompt = f"""
-    Generate quiz questions from the following course material with difficulty level {difficulty} and question type {question_type}. Provide questions and answers. 
+    Create quiz questions based on the following content. 
+    The difficulty level is {difficulty}. 
+    The type of quiz question is {question_type}.
 
-    Course Material:
+    Content:
     {file_content}
     """
-    
-    payload = {
-        "model": "nvidia/llama-3.1-405b-instruct",  # Replace with the appropriate NVIDIA model
-        "prompt": prompt,
-        "max_tokens": 1500
-    }
-    
-    response = requests.post(f"{base_url}/generate", headers=headers, json=payload)
-    
+
+    response = requests.post(
+        url=f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "meta/llama-3.1-405b-instruct",
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant that creates quiz questions."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 1500
+        }
+    )
+
     if response.status_code == 200:
-        return response.json().get("text", "").strip()
+        return response.json().get("choices", [{}])[0].get("message", {}).get("content", "No quiz generated.")
     else:
-        st.error(f"API request failed with status code {response.status_code}")
-        return ""
+        return f"Error: {response.status_code} - {response.text}"
 
-def main():
-    st.set_page_config(page_title="Course Quiz Generator", layout="wide")
-    st.title("📚 Course Quiz Generator")
+# Streamlit app layout
+st.set_page_config(page_title="Course Quiz Generator", layout="wide")
 
-    st.markdown("Upload your slides or PDF file and generate quiz questions with the desired difficulty and type.")
+st.title("📚 Course Quiz Generator")
+st.markdown("Upload your course PDF, specify quiz details, and generate quiz questions.")
 
-    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+# Upload section
+uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
-    if uploaded_file is not None:
-        file_content = extract_text_from_pdf(uploaded_file)
-        st.write("**File Uploaded:**", uploaded_file.name)
+if uploaded_file is not None:
+    file_content = extract_text_from_pdf(uploaded_file)
+    if file_content:
+        st.write("**Extracted Text:**")
+        st.text_area("Text Content", value=file_content, height=300)
 
-        difficulty = st.selectbox("Select Quiz Difficulty", ["Easy", "Medium", "Hard"])
-        question_type = st.selectbox("Select Question Type", ["Direct", "Case Scenario", "MCQ", "Essay"])
+        # Quiz generation inputs
+        st.sidebar.header("Quiz Details")
+        difficulty = st.sidebar.selectbox("Select Difficulty", ["Easy", "Medium", "Hard"])
+        question_type = st.sidebar.selectbox("Select Question Type", ["Direct", "Case Scenario", "MCQ", "Essay"])
 
-        if st.button("Generate Quiz"):
+        if st.sidebar.button("Generate Quiz"):
             with st.spinner('Generating quiz...'):
                 quiz_result = generate_quiz(file_content, difficulty, question_type)
 
-            if quiz_result:
-                # Display quiz questions
-                st.markdown("### Quiz Questions")
+            st.markdown("### Generated Quiz Questions")
+            st.text_area("Quiz Questions", value=quiz_result, height=300)
 
-                questions = re.split(r'\n\n+', quiz_result)
-                answers = []
+            # Button to show/hide answers
+            if st.button("Show Answers"):
+                # Generate answers (mocked here for demonstration purposes)
+                # You need to replace this with actual API call or logic to generate answers
+                answers = "These are the answers to the quiz questions."
+                st.text_area("Quiz Answers", value=answers, height=300)
 
-                for i, question in enumerate(questions):
-                    if i % 2 == 0:
-                        st.subheader(f"Question {i//2 + 1}")
-                        st.write(question)
-                    else:
-                        answers.append(question)
-                        
-                if answers:
-                    # Button to reveal answers
-                    if st.button("Show Answers"):
-                        st.markdown("### Quiz Answers")
-                        for i, answer in enumerate(answers):
-                            st.write(f"Answer {i + 1}: {answer}")
-
-if __name__ == "__main__":
-    main()
+else:
+    st.markdown("_Please upload a PDF file to proceed._")
